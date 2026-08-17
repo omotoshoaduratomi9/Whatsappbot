@@ -1,6 +1,7 @@
 import os
 import requests
 from flask import Flask, request
+from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -9,13 +10,14 @@ ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "")
 GRAPH_API_VERSION = os.environ.get("GRAPH_API_VERSION", "v23.0")
 
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
 
 @app.route("/", methods=["GET"])
 def home():
-    return "WhatsApp Bot is online! 🤖", 200
+    return "WhatsApp Bot + AI is online! 🤖", 200
 
 
-# WhatsApp webhook verification
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
     mode = request.args.get("hub.mode")
@@ -28,14 +30,12 @@ def verify_webhook():
     return "Verification failed", 403
 
 
-# Receive WhatsApp messages
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
 
     try:
         message = data["entry"][0]["changes"][0]["value"]["messages"][0]
-
         sender = message["from"]
 
         if message.get("type") == "text":
@@ -46,14 +46,25 @@ def webhook():
 
             elif text.lower() == "/menu":
                 reply = (
-                    "🤖 *WhatsApp Bot Menu*\n\n"
-                    "/menu - Show this menu\n"
-                    "/ping - Test the bot\n"
-                    "/help - Get help"
+                    "🤖 *Bot Menu*\n\n"
+                    "/menu - Show menu\n"
+                    "/ping - Test bot\n"
+                    "/help - Get help\n"
+                    "/ai <message> - Ask AI"
                 )
 
             elif text.lower() == "/help":
-                reply = "Send /menu to see what I can do. 😎"
+                reply = "Use /menu to see my commands. 😎"
+
+            elif text.lower().startswith("/ai "):
+                question = text[4:].strip()
+
+                response = client.responses.create(
+                    model="gpt-5.6-luna",
+                    input=question
+                )
+
+                reply = response.output_text
 
             else:
                 reply = f"You said: {text}"
@@ -85,9 +96,7 @@ def send_message(to, message):
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {
-            "body": message
-        },
+        "text": {"body": message},
     }
 
     response = requests.post(
